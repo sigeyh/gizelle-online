@@ -906,6 +906,63 @@
         // Initial update
         updateMatches();
         updateLastUpdatedTime();
+
+// Add to your existing JavaScript
+
+// API endpoints (replace with your actual API endpoints)
+const API_ENDPOINTS = {
+    LIVE_MATCHES: 'https://api.example.com/live-matches',
+    PREDICTIONS: 'https://api.example.com/predictions',
+    ODDS: 'https://api.example.com/odds'
+};
+
+// Real-time data fetching
+async function fetchLiveData() {
+    try {
+        const [matchesResponse, predictionsResponse, oddsResponse] = await Promise.all([
+            fetch(API_ENDPOINTS.LIVE_MATCHES),
+            fetch(API_ENDPOINTS.PREDICTIONS),
+            fetch(API_ENDPOINTS.ODDS)
+        ]);
+        
+        const liveMatches = await matchesResponse.json();
+        const predictions = await predictionsResponse.json();
+        const odds = await oddsResponse.json();
+        
+        return { liveMatches, predictions, odds };
+    } catch (error) {
+        console.error('Error fetching live data:', error);
+        return null;
+    }
+}
+
+// Update matches with real-time data
+function updateWithRealTimeData(matches, liveData) {
+    return matches.map(match => {
+        const liveMatch = liveData.liveMatches.find(m => m.id === match.id);
+        const prediction = liveData.predictions.find(p => p.matchId === match.id);
+        const matchOdds = liveData.odds.find(o => o.matchId === match.id);
+        
+        if (liveMatch) {
+            match.status = liveMatch.status;
+            match.score = liveMatch.score;
+            match.minute = liveMatch.minute;
+            match.events = liveMatch.events;
+        }
+        
+        if (prediction) {
+            match.prediction = prediction.probabilities;
+            match.topPick = prediction.topPick;
+            match.confidence = prediction.confidence;
+        }
+        
+        if (matchOdds) {
+            match.odds = matchOdds;
+        }
+        
+        return match;
+    });
+}
     </script>
 </body>
 </html>
