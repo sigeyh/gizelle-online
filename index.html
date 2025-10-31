@@ -514,6 +514,63 @@
                 margin-bottom: 10px;
             }
         }
+        /* Add these styles to your CSS */
+.live-indicator {
+    display: flex;
+    align-items: center;
+    background: #ff4757;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: bold;
+    margin-left: 10px;
+}
+
+.live-dot {
+    width: 6px;
+    height: 6px;
+    background: white;
+    border-radius: 50%;
+    margin-right: 5px;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.match-score {
+    font-weight: bold;
+    font-size: 16px;
+    color: #1a2a6c;
+    margin-left: 10px;
+}
+
+.live-events {
+    font-size: 12px;
+    color: #666;
+    margin-top: 5px;
+}
+
+.in-play-bets {
+    background: #fff3e0;
+    border-left: 3px solid #ff9800;
+    padding: 8px;
+    margin-top: 8px;
+    border-radius: 4px;
+}
+
+.bet-opportunity {
+    background: #e8f5e9;
+    border: 1px solid #4caf50;
+    border-radius: 4px;
+    padding: 8px;
+    margin: 5px 0;
+    font-size: 12px;
+}
     </style>
 </head>
 <body>
@@ -615,6 +672,21 @@
                 <!-- Matches will be dynamically inserted here -->
             </div>
         </div>
+
+<!-- Add this to your match HTML structure -->
+<div class="match">
+    <div class="teams">
+        <!-- Your existing team display -->
+        <div class="live-indicator" id="live-indicator-${match.id}">
+            <span class="live-dot"></span>
+            LIVE ${match.minute}'
+        </div>
+        <div class="match-score" id="score-${match.id}">
+            ${match.score ? match.score.home + ' - ' + match.score.away : 'VS'}
+        </div>
+    </div>
+    <!-- Rest of your match HTML -->
+</div>
     </section>
     
     <footer>
@@ -963,6 +1035,200 @@ function updateWithRealTimeData(matches, liveData) {
         return match;
     });
 }
+
+// Add odds display functionality
+function displayRealTimeOdds(match) {
+    if (!match.odds) return '';
+    
+    return `
+        <div class="real-time-odds">
+            <div class="odds-header">Live Odds</div>
+            <div class="odds-container">
+                <div class="odds-item">
+                    <span>1</span>
+                    <span class="odds-value">${match.odds.homeWin || 'N/A'}</span>
+                </div>
+                <div class="odds-item">
+                    <span>X</span>
+                    <span class="odds-value">${match.odds.draw || 'N/A'}</span>
+                </div>
+                <div class="odds-item">
+                    <span>2</span>
+                    <span class="odds-value">${match.odds.awayWin || 'N/A'}</span>
+                </div>
+            </div>
+            ${match.odds.overUnder ? `
+            <div class="over-under">
+                <small>Over 2.5: ${match.odds.overUnder.over || 'N/A'}</small>
+                <small>Under 2.5: ${match.odds.overUnder.under || 'N/A'}</small>
+            </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+       
+// WebSocket connection for real-time updates
+function setupWebSocket() {
+    const ws = new WebSocket('wss://api.example.com/live-updates');
+    
+    ws.onopen = function() {
+        console.log('WebSocket connected');
+        // Subscribe to live matches
+        ws.send(JSON.stringify({
+            type: 'subscribe',
+            channels: ['live_matches', 'odds_updates', 'predictions']
+        }));
+    };
+    
+    ws.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        
+        switch(data.type) {
+            case 'match_update':
+                updateLiveMatch(data.match);
+                break;
+            case 'odds_update':
+                updateOdds(data.odds);
+                break;
+            case 'prediction_update':
+                updatePrediction(data.prediction);
+                break;
+        }
+    };
+    
+    ws.onclose = function() {
+        console.log('WebSocket disconnected');
+        // Attempt to reconnect after 5 seconds
+        setTimeout(setupWebSocket, 5000);
+    };
+}
+
+// Update individual match in real-time
+function updateLiveMatch(matchData) {
+    const matchElement = document.querySelector(`[data-match-id="${matchData.id}"]`);
+    if (!matchElement) return;
+    
+    // Update score
+    const scoreElement = matchElement.querySelector('.match-score');
+    if (scoreElement) {
+        scoreElement.textContent = `${matchData.score.home} - ${matchData.score.away}`;
+    }
+    
+    // Update minute
+    const minuteElement = matchElement.querySelector('.live-indicator');
+    if (minuteElement) {
+        minuteElement.textContent = `LIVE ${matchData.minute}'`;
+    }
+    
+    // Update events
+    const eventsElement = matchElement.querySelector('.live-events');
+    if (eventsElement && matchData.events) {
+        eventsElement.innerHTML = matchData.events.map(event => 
+            `<div>${event.minute}' ${event.type}: ${event.player}</div>`
+        ).join('');
+    }
+}
+
+
+// Auto-refresh system
+let autoRefreshInterval;
+
+function startAutoRefresh() {
+    // Refresh every 30 seconds
+    autoRefreshInterval = setInterval(async () => {
+        await refreshLiveData();
+    }, 30000);
+}
+
+function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+    }
+}
+
+async function refreshLiveData() {
+    const liveData = await fetchLiveData();
+    if (liveData) {
+        const updatedMatches = updateWithRealTimeData(matches, liveData);
+        renderMatches(updatedMatches);
+        updateLastUpdatedTime();
+    }
+}
+
+// Update your existing renderMatches function
+function renderMatches(matchesToRender) {
+    const container = document.getElementById('matches-container');
+    container.innerHTML = '';
+    
+    matchesToRender.forEach(match => {
+        const matchElement = createMatchElement(match);
+        container.appendChild(matchElement);
+    });
+}
+
+function createMatchElement(match) {
+    const matchElement = document.createElement('div');
+    matchElement.className = 'match';
+    matchElement.setAttribute('data-match-id', match.id);
+    
+    matchElement.innerHTML = `
+        <div class="teams">
+            <div class="team home-team">
+                <span>${match.homeTeam}</span>
+                <div class="team-logo">${match.homeLogo}</div>
+            </div>
+            <span class="vs">vs</span>
+            <div class="team away-team">
+                <div class="team-logo">${match.awayLogo}</div>
+                <span>${match.awayTeam}</span>
+            </div>
+            ${match.status === 'LIVE' ? `
+                <div class="live-indicator">
+                    <span class="live-dot"></span>
+                    LIVE ${match.minute}'
+                </div>
+                <div class="match-score">${match.score.home} - ${match.score.away}</div>
+            ` : `<div class="match-time">${match.time}</div>`}
+        </div>
+        ${match.status === 'LIVE' && match.events ? `
+            <div class="live-events">
+                ${match.events.slice(-2).map(event => 
+                    `<div>${event.minute}' ${event.type}</div>`
+                ).join('')}
+            </div>
+        ` : ''}
+        <div class="prediction">
+            <div class="pred-option pred-1">1<br><small>${match.prediction["1"]}%</small></div>
+            <div class="pred-option pred-x">X<br><small>${match.prediction["X"]}%</small></div>
+            <div class="pred-option pred-2">2<br><small>${match.prediction["2"]}%</small></div>
+        </div>
+        <div>
+            <div class="top-prediction">${match.topPick}</div>
+        </div>
+        <div class="probability">${match.probability}</div>
+        ${match.odds ? displayRealTimeOdds(match) : ''}
+    `;
+    
+    return matchElement;
+}
+
+// Update your existing initialization
+document.addEventListener('DOMContentLoaded', function() {
+    // Your existing initialization code
+    
+    // Add these lines:
+    setupWebSocket();
+    startAutoRefresh();
+    
+    // Initial load of real-time data
+    refreshLiveData();
+});
+
+// Clean up when leaving page
+window.addEventListener('beforeunload', function() {
+    stopAutoRefresh();
+});
     </script>
 </body>
 </html>
